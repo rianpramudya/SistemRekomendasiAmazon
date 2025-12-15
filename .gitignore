@@ -1,0 +1,15 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Mac System files
+.DS_Store
+
+# Dataset (Jika ukuran file > 100MB, github akan menolak)
+# Kita hanya upload data bersih yang kecil, raw data yang besar di-ignore
+data/ratings_Electronics.csv
+
+# Virtual Environment (jika ada)
+venv/
+env/
+.env
