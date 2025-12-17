@@ -109,7 +109,7 @@ def render():
 
     # --- 3. TECHNICAL FOOTER ---
     st.markdown("<br>", unsafe_allow_html=True)
-    with st.expander("🛠️ Technical Methodology Details"):
+    with st.expander("Technical Methodology Details"):
         st.markdown("""
         ### Evaluation Strategy
         Proses evaluasi dilakukan menggunakan teknik **5-Fold Cross Validation** untuk menjamin konsistensi hasil.

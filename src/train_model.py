@@ -1,81 +1,79 @@
-import pandas as pd
 import joblib
 import os
 import numpy as np
-from scipy.sparse import csr_matrix
-from sklearn.decomposition import TruncatedSVD
 from sklearn.cluster import KMeans
+import pandas as pd
 
-def train_and_eval():
-    print("🚀 Memulai Training Model-Based (Clustering K-Means)...")
+def train_model():
+    print("🚀 Memulai Training Model (K-Means Clustering Only)...")
     
-    file_path = 'data/clean_ratings.csv'
-    if not os.path.exists(file_path):
-        print("❌ Data tidak ditemukan.")
+    feature_path = 'data/preprocessed_features.pkl'
+    if not os.path.exists(feature_path):
+        print("❌ File fitur tidak ditemukan. Jalankan 'python src/preprocessing.py' terlebih dahulu!")
         return
 
-    df = pd.read_csv(file_path)
+    # 1. Load Data Hasil Preprocessing
+    print("📥 Memuat Fitur SVD dari Preprocessing...")
+    data = joblib.load(feature_path)
     
-    # 1. Pivot Table
-    print("🔄 Membuat Matrix User-Item...")
-    user_item_pivot = df.pivot_table(index='userId', columns='productId', values='rating').fillna(0)
-    user_item_matrix = csr_matrix(user_item_pivot.values)
+    matrix_reduced = data['matrix_reduced']     # Data hasil SVD (Fitur Laten)
+    user_item_matrix = data['user_item_matrix'] # Data asli (sparse) untuk hitung rating
+    user_item_pivot = data['user_item_pivot']   # Untuk nama kolom/produk
+    svd_model = data['svd_model']               # Untuk dashboard nanti
     
-    # 2. SVD (Dimensionality Reduction)
-    print("📉 Melakukan Reduksi Dimensi (SVD)...")
-    svd = TruncatedSVD(n_components=50, random_state=42)
-    matrix_reduced = svd.fit_transform(user_item_matrix)
-    
-    # 3. K-Means Clustering
-    print("🧠 Melatih Model K-Means...")
+    # 2. Training K-Means
+    print(f"🧠 Melatih K-Means pada {matrix_reduced.shape[0]} user...")
     n_clusters = 10 
     kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-    kmeans.fit(matrix_reduced)
+    
+    # Training hanya menggunakan data yang SUDAH di-SVD (preprocessing)
+    kmeans.fit(matrix_reduced) 
     
     cluster_labels = kmeans.labels_
     
-    # 4. Pre-compute Recommendations (IMPROVED LOGIC: SUM instead of MEAN)
+    # 3. Hitung Rekomendasi (Popularity per Cluster)
     print("⚡ Menghitung Top Items per Cluster (Popularity Based)...")
     top_items_per_cluster = {}
     
-    # Mapping User Index -> Cluster
+    # Helper dataframe untuk mapping User -> Cluster
     user_cluster_map = pd.DataFrame({
         'user_idx': range(len(user_item_pivot)),
         'cluster': cluster_labels
     })
 
     for cluster_id in range(n_clusters):
-        # Ambil index user di cluster ini
+        # Ambil index user yang masuk ke dalam cluster ini
         u_indices = user_cluster_map[user_cluster_map['cluster'] == cluster_id]['user_idx'].values
         
-        # Ambil subset matriks (Sparse operation = Cepat)
+        # Ambil data rating asli mereka (dari matrix sparse agar cepat)
         cluster_submatrix = user_item_matrix[u_indices]
         
-        # Hitung Total Rating per produk (Summing Axis 0)
-        # Logic: Barang populer di komunitas ini = Sum Rating Tinggi
+        # Hitung Popularitas: Total Rating (SUM) per produk dalam cluster
+        # Semakin tinggi jumlah rating, semakin populer barang tersebut di komunitas ini
         cluster_scores = np.array(cluster_submatrix.sum(axis=0)).flatten()
         
-        # Ambil Top 50 Index Produk
+        # Ambil Top 50 Produk dengan skor tertinggi
         top_indices = cluster_scores.argsort()[::-1][:50]
         
-        # Translate ke ASIN
+        # Translate index kembali ke ID Produk (ASIN)
         top_products = [user_item_pivot.columns[i] for i in top_indices]
+        
         top_items_per_cluster[cluster_id] = top_products
 
-    # 5. Simpan Model
-    print("💾 Menyimpan Model...")
-    artifacts = {
-        'svd': svd,
+    # 4. Simpan Model Akhir untuk Aplikasi
+    print("💾 Menyimpan Model Akhir...")
+    final_artifacts = {
         'kmeans': kmeans,
-        'user_item_pivot': user_item_pivot, 
+        'svd': svd_model, # SVD tetap disimpan untuk memproses input user baru di Dashboard
+        'user_item_pivot': user_item_pivot,
         'top_items_per_cluster': top_items_per_cluster
     }
     
     if not os.path.exists('models'):
         os.makedirs('models')
-
-    joblib.dump(artifacts, 'models/recsys_model.pkl')
-    print("✅ Model Clustering berhasil disimpan!")
+        
+    joblib.dump(final_artifacts, 'models/recsys_model.pkl')
+    print("✅ Model K-Means berhasil dilatih dan disimpan di 'models/recsys_model.pkl'!")
 
 if __name__ == "__main__":
-    train_and_eval()
+    train_model()
